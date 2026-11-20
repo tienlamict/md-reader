@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "wails-dev",
+      "runtimeExecutable": "C:\\Users\\lamnt\\go\\bin\\wails.exe",
+      "runtimeArgs": ["dev", "-browser=false", "-noreload"],
+      "port": 34115
+    }
+  ]
+}

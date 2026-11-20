@@ -86,14 +86,20 @@ md-reader/
 - Diagram mermaid, công thức toán `$...$` / `$$...$$`, nút copy cho code block.
 - In / xuất ra HTML.
 
-### Phase 5: Đóng gói (khoảng 1 ngày)
+### Phase 5: Chế độ sửa (khoảng 2–3 ngày)
+
+- 3 chế độ xem cho mỗi tab: **Xem** / **Sửa** / **Chia đôi** (editor bên trái, preview live bên phải).
+- Editor: CodeMirror 6 (highlight cú pháp markdown, số dòng, undo/redo, tìm & thay thế).
+- Preview cập nhật live (debounce ~150ms), cuộn đồng bộ giữa editor và preview.
+- `Ctrl+S` lưu, `Ctrl+Shift+S` lưu thành file khác, `Ctrl+N` tạo file mới.
+- Đánh dấu tab chưa lưu (`●`), hỏi trước khi đóng tab/thoát nếu còn thay đổi chưa lưu.
+- Xử lý xung đột: file bị sửa bên ngoài khi đang có thay đổi chưa lưu thì hỏi người dùng thay vì tự reload.
+- Giữ nguyên kiểu xuống dòng (CRLF/LF) và encoding (UTF-8, có/không BOM) của file gốc khi lưu.
+
+### Phase 6: Đóng gói (khoảng 1 ngày)
 
 - `wails build`, tạo installer NSIS, đăng ký mở file `.md` bằng app (file association).
 - Chỉ cho chạy 1 instance (Wails có `SingleInstanceLock`): double-click file trong Explorer sẽ mở thêm tab trong cửa sổ đang chạy, không mở cửa sổ mới.
-
-### Phase 6 (tuỳ chọn): Chế độ sửa
-
-- Chia đôi màn hình: bên trái editor (CodeMirror 6), bên phải preview chạy live; lưu bằng `Ctrl+S`.
 
 ## 4. Kiểm thử
 
@@ -107,9 +113,9 @@ md-reader/
 - **HTML độc trong file `.md`**: lọc bằng bluemonday và đặt CSP cho WebView.
 - **Máy không có WebView2** (Win10 cũ): installer của Wails có thể tự cài kèm.
 
-## 6. Cần quyết định
+## 6. Quyết định đã chốt
 
-1. **Chỉ đọc, hay cần cả chế độ sửa (Phase 6)?**
-2. **Nền tảng**: chỉ Windows, hay cần chạy cả macOS/Linux? Wails hỗ trợ cả 3, nhưng file association và installer phải làm riêng cho từng OS.
-3. **Frontend**: dùng **vanilla TypeScript** (nhẹ, đủ cho viewer, là phương án đề xuất) hay Svelte/React (dễ mở rộng UI hơn)?
-4. **Mermaid và công thức toán** có cần ngay từ đầu không, hay để Phase 4?
+1. **Cần cả chế độ sửa**: là Phase 5 (bắt buộc), đóng gói dời xuống Phase 6.
+2. **Chỉ Windows**: không cần làm installer và file association cho macOS/Linux.
+3. **Frontend vanilla TypeScript** + Vite.
+4. **Mermaid và công thức toán để Phase 4.**
