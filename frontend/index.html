@@ -6,7 +6,14 @@
     <title>MD Reader</title>
 </head>
 <body>
-<div id="app"></div>
+<section class="welcome" id="welcome">
+    <h1>MD Reader</h1>
+    <p>Xem file Markdown giống như trên GitHub.</p>
+    <button class="btn" id="open-btn" type="button">Mở file…</button>
+    <p>hoặc nhấn <kbd class="hint">Ctrl</kbd> + <kbd class="hint">O</kbd></p>
+</section>
+<article class="markdown-body" id="doc" hidden></article>
+<div class="error" id="error" role="alert" hidden></div>
 <script src="./src/main.ts" type="module"></script>
 </body>
 </html>

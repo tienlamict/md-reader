@@ -127,16 +127,23 @@ func plainText(n ast.Node, src []byte) string {
 	return strings.TrimSpace(b.String())
 }
 
-// HighlightCSS returns the CSS for syntax-highlighted code blocks:
-// GitHub light by default and GitHub dark when the OS prefers dark mode.
-func HighlightCSS() string {
-	var b strings.Builder
+// ThemeCSS holds the syntax-highlighting stylesheets for both themes.
+// The frontend switches between them with the <style media> attribute.
+type ThemeCSS struct {
+	Light string `json:"light"`
+	Dark  string `json:"dark"`
+}
+
+// HighlightCSS returns the CSS for syntax-highlighted code blocks
+// (chroma's "github" and "github-dark" styles).
+// The <pre> background comes from github-markdown-css: `.markdown-body pre`
+// is more specific than chroma's `.chroma`, so no override is needed.
+func HighlightCSS() ThemeCSS {
 	f := chromahtml.New(chromahtml.WithClasses(true))
-	_ = f.WriteCSS(&b, styles.Get("github"))
-	b.WriteString("@media (prefers-color-scheme: dark) {\n")
-	_ = f.WriteCSS(&b, styles.Get("github-dark"))
-	b.WriteString("}\n")
-	// The <pre> background comes from github-markdown-css: `.markdown-body pre`
-	// is more specific than chroma's `.chroma`, so no override is needed.
-	return b.String()
+	css := func(style string) string {
+		var b strings.Builder
+		_ = f.WriteCSS(&b, styles.Get(style))
+		return b.String()
+	}
+	return ThemeCSS{Light: css("github"), Dark: css("github-dark")}
 }

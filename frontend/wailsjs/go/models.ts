@@ -1,33 +1,44 @@
-export namespace markdown {
+export namespace links {
 	
-	export class Heading {
-	    level: number;
-	    id: string;
-	    text: string;
+	export class Target {
+	    kind: string;
+	    path?: string;
+	    fragment?: string;
+	    url?: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new Heading(source);
+	        return new Target(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.level = source["level"];
-	        this.id = source["id"];
-	        this.text = source["text"];
+	        this.kind = source["kind"];
+	        this.path = source["path"];
+	        this.fragment = source["fragment"];
+	        this.url = source["url"];
 	    }
 	}
-	export class Result {
+
+}
+
+export namespace main {
+	
+	export class Document {
+	    path: string;
+	    name: string;
 	    html: string;
-	    headings: Heading[];
+	    headings: markdown.Heading[];
 	
 	    static createFrom(source: any = {}) {
-	        return new Result(source);
+	        return new Document(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
 	        this.html = source["html"];
-	        this.headings = this.convertValues(source["headings"], Heading);
+	        this.headings = this.convertValues(source["headings"], markdown.Heading);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -47,6 +58,41 @@ export namespace markdown {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace markdown {
+	
+	export class Heading {
+	    level: number;
+	    id: string;
+	    text: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Heading(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.id = source["id"];
+	        this.text = source["text"];
+	    }
+	}
+	export class ThemeCSS {
+	    light: string;
+	    dark: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ThemeCSS(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.light = source["light"];
+	        this.dark = source["dark"];
+	    }
 	}
 
 }

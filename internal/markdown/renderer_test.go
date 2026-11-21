@@ -125,9 +125,10 @@ func TestSanitize(t *testing.T) {
 
 func TestHighlightCSS(t *testing.T) {
 	css := HighlightCSS()
-	for _, want := range []string{".chroma", "prefers-color-scheme: dark"} {
-		if !strings.Contains(css, want) {
-			t.Errorf("CSS lacks %q", want)
-		}
+	if !strings.Contains(css.Light, ".chroma") || !strings.Contains(css.Dark, ".chroma") {
+		t.Fatal("missing .chroma rules")
+	}
+	if css.Light == css.Dark {
+		t.Error("light and dark CSS are identical")
 	}
 }

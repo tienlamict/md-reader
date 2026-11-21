@@ -60,16 +60,16 @@ md-reader/
 
 ## 3. Các giai đoạn
 
-### Phase 0: Khởi tạo (khoảng 0.5 ngày)
+### Phase 0: Khởi tạo (khoảng 0.5 ngày) — ✅ xong
 
 - Cài Wails CLI, chạy `wails doctor`, tạo project từ template `vanilla-ts`, thiết lập `.gitignore`.
 
-### Phase 1: Lõi render (khoảng 1–2 ngày). Phần này quan trọng nhất.
+### Phase 1: Lõi render (khoảng 1–2 ngày) — ✅ xong
 
 - Dựng pipeline goldmark với GFM, highlight, footnote, emoji, heading ID kiểu GitHub (`## Hello World` → `#hello-world`) và GitHub Alerts.
 - Viết test golden-file: một bộ file `.md` mẫu (bảng, code, task list, HTML thô, alert…) đối chiếu với HTML mong đợi.
 
-### Phase 2: Viewer cơ bản (khoảng 1–2 ngày)
+### Phase 2: Viewer cơ bản (khoảng 1–2 ngày) — ✅ xong
 
 - Mở file (`Ctrl+O`), render, áp CSS GitHub, chuyển light/dark (mặc định theo hệ thống).
 - Ảnh có đường dẫn tương đối hiển thị đúng. Link tới `.md` khác mở ngay trong app, link `http` mở bằng trình duyệt, link `#anchor` thì cuộn tới vị trí.
