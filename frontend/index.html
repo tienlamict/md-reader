@@ -6,14 +6,50 @@
     <title>MD Reader</title>
 </head>
 <body>
-<section class="welcome" id="welcome">
-    <h1>MD Reader</h1>
-    <p>Xem file Markdown giống như trên GitHub.</p>
-    <button class="btn" id="open-btn" type="button">Mở file…</button>
-    <p>hoặc nhấn <kbd class="hint">Ctrl</kbd> + <kbd class="hint">O</kbd></p>
-</section>
-<article class="markdown-body" id="doc" hidden></article>
-<div class="error" id="error" role="alert" hidden></div>
+<div class="app" id="app">
+    <aside class="sidebar pane" id="sidebar" aria-label="Cây thư mục">
+        <header class="pane-header">
+            <span class="pane-title" id="folder-name">Thư mục</span>
+            <span class="pane-actions">
+                <button class="icon-btn" id="folder-open" type="button" title="Mở thư mục (Ctrl+Shift+O)"></button>
+                <button class="icon-btn" id="folder-refresh" type="button" title="Làm mới"></button>
+            </span>
+        </header>
+        <div class="tree" id="tree" hidden></div>
+        <div class="pane-empty" id="tree-empty">
+            <p class="pane-note">Chưa mở thư mục nào.</p>
+            <button class="btn btn-sm" id="tree-open" type="button">Mở thư mục…</button>
+        </div>
+    </aside>
+
+    <div class="main">
+        <nav class="tabbar" id="tabbar" role="tablist" aria-label="Các file đang mở"></nav>
+        <div class="body">
+            <div class="content" id="content">
+                <section class="welcome" id="welcome">
+                    <h1>MD Reader</h1>
+                    <p>Xem file Markdown giống như trên GitHub.</p>
+                    <div class="welcome-actions">
+                        <button class="btn" id="open-btn" type="button">Mở file…</button>
+                        <button class="btn" id="open-folder-btn" type="button">Mở thư mục…</button>
+                    </div>
+                    <p class="hint">Hoặc kéo thả file .md / thư mục vào cửa sổ.</p>
+                    <div class="recent" id="recent" hidden>
+                        <h2>Mở gần đây</h2>
+                        <ul id="recent-list"></ul>
+                    </div>
+                </section>
+                <article class="markdown-body" id="doc" hidden></article>
+            </div>
+            <aside class="toc pane" id="toc" aria-label="Mục lục">
+                <header class="pane-header"><span class="pane-title">Mục lục</span></header>
+                <nav class="toc-list" id="toc-list"></nav>
+            </aside>
+            <div class="findbar" id="findbar" hidden></div>
+        </div>
+    </div>
+</div>
+<div class="toast" hidden id="toast"></div>
 <script src="./src/main.ts" type="module"></script>
 </body>
 </html>

@@ -74,7 +74,7 @@ md-reader/
 - Mở file (`Ctrl+O`), render, áp CSS GitHub, chuyển light/dark (mặc định theo hệ thống).
 - Ảnh có đường dẫn tương đối hiển thị đúng. Link tới `.md` khác mở ngay trong app, link `http` mở bằng trình duyệt, link `#anchor` thì cuộn tới vị trí.
 
-### Phase 3: Tính năng kiểu Notepad++ (khoảng 2–3 ngày)
+### Phase 3: Tính năng kiểu Notepad++ (khoảng 2–3 ngày) — ✅ xong
 
 - Nhiều tab; sidebar cây thư mục (mở folder); danh sách file gần đây.
 - Kéo thả file vào cửa sổ; mở file qua tham số dòng lệnh (`md-reader.exe README.md`).

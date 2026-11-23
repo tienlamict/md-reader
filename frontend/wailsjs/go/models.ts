@@ -1,3 +1,51 @@
+export namespace config {
+	
+	export class Session {
+	    tabs: string[];
+	    active: string;
+	    folder: string;
+	    showSidebar: boolean;
+	    showToc: boolean;
+	    zoom: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Session(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tabs = source["tabs"];
+	        this.active = source["active"];
+	        this.folder = source["folder"];
+	        this.showSidebar = source["showSidebar"];
+	        this.showToc = source["showToc"];
+	        this.zoom = source["zoom"];
+	    }
+	}
+
+}
+
+export namespace fstree {
+	
+	export class Entry {
+	    name: string;
+	    path: string;
+	    isDir: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.isDir = source["isDir"];
+	    }
+	}
+
+}
+
 export namespace links {
 	
 	export class Target {
@@ -58,6 +106,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class StartupArgs {
+	    files: string[];
+	    folder: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new StartupArgs(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.files = source["files"];
+	        this.folder = source["folder"];
+	    }
 	}
 
 }
