@@ -12,6 +12,11 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
-    "github-markdown-css": "^5.9.0"
+    "github-markdown-css": "^5.9.0",
+    "katex": "^0.19.1",
+    "mermaid": "^11.17.2"
+  },
+  "overrides": {
+    "katex": "$katex"
   }
 }

@@ -30,6 +30,8 @@ export function ResolveLink(arg1:string,arg2:string):Promise<links.Target>;
 
 export function RevealInExplorer(arg1:string):Promise<void>;
 
+export function SaveHTML(arg1:string,arg2:string):Promise<string>;
+
 export function SaveSession(arg1:config.Session):Promise<void>;
 
 export function WatchFiles(arg1:Array<string>):Promise<void>;

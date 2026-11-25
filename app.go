@@ -180,6 +180,28 @@ func (a *App) RevealInExplorer(path string) error {
 	return revealInExplorer(path)
 }
 
+// SaveHTML asks where to save an exported HTML page (next to docPath by
+// default) and writes it. It returns the saved path, or "" if cancelled.
+func (a *App) SaveHTML(docPath, content string) (string, error) {
+	name := strings.TrimSuffix(filepath.Base(docPath), filepath.Ext(docPath)) + ".html"
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:            "Xuất ra HTML",
+		DefaultDirectory: filepath.Dir(docPath),
+		DefaultFilename:  name,
+		Filters:          []runtime.FileFilter{{DisplayName: "Trang web (*.html)", Pattern: "*.html;*.htm"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	if ext := strings.ToLower(filepath.Ext(path)); ext != ".html" && ext != ".htm" {
+		path += ".html"
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("không lưu được file: %w", err)
+	}
+	return path, nil
+}
+
 // GetStartupArgs returns the files and folder passed on the command line.
 func (a *App) GetStartupArgs() StartupArgs {
 	return a.args
@@ -318,6 +340,9 @@ func (a *App) buildMenu() *menu.Menu {
 		recent.AddSeparator()
 		recent.AddText("Xoá danh sách", nil, func(*menu.CallbackData) { a.clearRecentFiles() })
 	}
+	file.AddSeparator()
+	file.AddText("Xuất ra HTML…\tCtrl+Shift+E", nil, cmd("export-html"))
+	file.AddText("In…\tCtrl+P", nil, cmd("print"))
 	file.AddSeparator()
 	file.AddText("Tải lại\tF5", nil, cmd("reload"))
 	file.AddText("Đóng tab\tCtrl+W", nil, cmd("close-tab"))

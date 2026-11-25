@@ -81,7 +81,7 @@ md-reader/
 - Tự reload khi file đổi; mục lục (TOC) bên phải; tìm trong trang (`Ctrl+F`); zoom (`Ctrl +/-`).
 - Nhớ trạng thái: theme, zoom, các tab đang mở.
 
-### Phase 4: Nâng cao (khoảng 1–2 ngày)
+### Phase 4: Nâng cao (khoảng 1–2 ngày) — ✅ xong
 
 - Diagram mermaid, công thức toán `$...$` / `$$...$$`, nút copy cho code block.
 - In / xuất ra HTML.

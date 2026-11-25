@@ -55,16 +55,23 @@ func New() *Renderer {
 			),
 		),
 		goldmark.WithParserOptions(
+			parser.WithBlockParsers(util.Prioritized(&mathBlockParser{}, 690)),
+			parser.WithInlineParsers(util.Prioritized(&mathInlineParser{}, 150)),
 			parser.WithASTTransformers(
 				util.Prioritized(&headingIDTransformer{}, 100),
 				util.Prioritized(&alertTransformer{}, 200),
 				util.Prioritized(&taskListTransformer{}, 300),
+				util.Prioritized(&fencedTransformer{}, 400),
 			),
 		),
 		goldmark.WithRendererOptions(
 			// Raw HTML is allowed like on GitHub; the output is sanitized afterwards.
 			html.WithUnsafe(),
-			renderer.WithNodeRenderers(util.Prioritized(&alertRenderer{}, 500)),
+			renderer.WithNodeRenderers(
+				util.Prioritized(&alertRenderer{}, 500),
+				util.Prioritized(&mathRenderer{}, 500),
+				util.Prioritized(&mermaidRenderer{}, 500),
+			),
 		),
 	)
 	return &Renderer{md: md}
@@ -119,6 +126,8 @@ func plainText(n ast.Node, src []byte) string {
 			}
 		case *ast.String:
 			b.Write(t.Value)
+		case *MathInline:
+			b.Write(t.TeX)
 		case *ast.RawHTML:
 			return ast.WalkSkipChildren, nil
 		}

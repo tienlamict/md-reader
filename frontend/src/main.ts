@@ -12,12 +12,15 @@ import {
     OpenFolderDialog,
     RevealInExplorer,
     ResolveLink,
+    SaveHTML,
     SaveSession,
     WatchFiles,
 } from '../wailsjs/go/main/App';
 import {BrowserOpenURL, EventsOn, WindowSetTitle} from '../wailsjs/runtime/runtime';
+import {addCopyButtons, handleCopyClick, renderMath, renderMermaid} from './enhance';
+import {buildStandaloneHtml} from './export';
 import {FindBar} from './find';
-import {addHighlightCss, applyTheme, type Theme} from './theme';
+import {addHighlightCss, applyTheme, isDark, onAppearanceChange, type Theme} from './theme';
 import {type HeadingInfo, Toc} from './toc';
 import {FileTree} from './tree';
 import {baseName, escapeHtml, icon, samePath, showError, showToast} from './ui';
@@ -149,6 +152,59 @@ function renderActive() {
     tree.setActive(tab.path);
     find.refresh();
     WindowSetTitle(`${tab.name} - MD Reader`);
+    enhanceDoc(tab.scrollTop);
+}
+
+let enhanceSeq = 0;
+let userScrolled = false;
+for (const ev of ['wheel', 'keydown', 'mousedown', 'touchstart']) {
+    contentEl.addEventListener(ev, () => (userScrolled = true), {passive: true});
+}
+
+/**
+ * Adds copy buttons, then typesets math and diagrams (asynchronous). They
+ * change the page height, so the scroll position is restored again unless the
+ * user has scrolled in the meantime.
+ */
+async function enhanceDoc(scrollTop: number) {
+    const seq = ++enhanceSeq;
+    userScrolled = false;
+    addCopyButtons(docEl);
+    try {
+        await renderMath(docEl);
+        if (seq !== enhanceSeq) return;
+        await renderMermaid(docEl, isDark());
+    } catch (err) {
+        showError(err);
+    }
+    if (seq !== enhanceSeq) return;
+    if (!userScrolled && scrollTop > 0) contentEl.scrollTop = scrollTop;
+    find.refresh();
+    toc.updateActive();
+}
+
+onAppearanceChange((dark) => {
+    if (!docEl.hidden) renderMermaid(docEl, dark);
+});
+
+// ---------- Print & export ----------
+
+async function printDoc() {
+    if (!state.active) return;
+    // Paper is white: re-draw dark diagrams in light colours while printing.
+    const recolor = isDark() && docEl.querySelector('.mermaid-block') !== null;
+    if (recolor) await renderMermaid(docEl, false);
+    window.print();
+    if (recolor) await renderMermaid(docEl, isDark());
+}
+
+async function exportHtml() {
+    const tab = state.active;
+    if (!tab) return;
+    const title = tab.headings.find((h) => h.level === 1)?.text || tab.name;
+    const html = await buildStandaloneHtml(docEl, title, isDark());
+    const saved = await SaveHTML(tab.path, html);
+    if (saved) showToast(`Đã lưu ${saved}`, 'info', 4000);
 }
 
 function scrollToAnchor(fragment: string): boolean {
@@ -380,6 +436,8 @@ const commands: Record<string, () => unknown> = {
     'forward': () => goHistory('forward'),
     'next-tab': () => cycleTab(1),
     'prev-tab': () => cycleTab(-1),
+    'print': printDoc,
+    'export-html': exportHtml,
 };
 
 function run(name: string) {
@@ -412,6 +470,8 @@ const shortcuts: [boolean, boolean, boolean, string, string][] = [
     [true, true, false, 'Tab', 'prev-tab'],
     [true, false, false, 'PageDown', 'next-tab'],
     [true, false, false, 'PageUp', 'prev-tab'],
+    [true, false, false, 'KeyP', 'print'],
+    [true, true, false, 'KeyE', 'export-html'],
 ];
 
 window.addEventListener('keydown', (e) => {
@@ -432,6 +492,7 @@ contentEl.addEventListener('wheel', (e) => {
 // ---------- Mouse ----------
 
 async function onLinkClick(e: MouseEvent) {
+    if (e.button === 0 && handleCopyClick(e)) return;
     const a = (e.target as Element).closest('a');
     if (!a) return;
     const href = a.getAttribute('href');
@@ -554,4 +615,4 @@ async function init() {
 init().catch(showError);
 
 // Hook for manual testing from the dev browser console.
-Object.assign(window, {mdReader: {openFile, openFolder, run, state}});
+Object.assign(window, {mdReader: {openFile, openFolder, run, state, buildStandaloneHtml}});

@@ -652,3 +652,124 @@ button {
     background: var(--info-bg);
     font-variant-numeric: tabular-nums;
 }
+
+/* ---------- Code copy button ---------- */
+
+.markdown-body .code-wrap {
+    position: relative;
+}
+
+.markdown-body .code-copy {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    color: var(--fgColor-muted, var(--muted));
+    background: var(--bgColor-default, var(--bg));
+    border: 1px solid var(--borderColor-default, var(--border));
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.1s;
+}
+
+.markdown-body .code-wrap:hover .code-copy,
+.markdown-body .code-copy:focus-visible,
+.markdown-body .code-copy.copied {
+    opacity: 1;
+}
+
+.markdown-body .code-copy:hover {
+    color: var(--fgColor-default, var(--fg));
+}
+
+.markdown-body .code-copy.copied {
+    color: var(--fgColor-success, #1a7f37);
+}
+
+/* ---------- Mermaid & math ---------- */
+
+.markdown-body .mermaid-block {
+    margin-bottom: 16px;
+    overflow-x: auto;
+    text-align: center;
+}
+
+.markdown-body .mermaid-block svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Until mermaid has drawn it, show the source like a code block. */
+.markdown-body .mermaid-block:not(.is-rendered) .mermaid-source {
+    text-align: left;
+}
+
+.markdown-body .mermaid-error {
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+    padding: 8px 12px;
+    text-align: left;
+    color: var(--fgColor-danger, var(--error-fg));
+    background: var(--bgColor-danger-muted, var(--error-bg));
+    border-radius: 6px;
+}
+
+.markdown-body .math-display {
+    display: block;
+    margin: 0 0 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-align: center;
+}
+
+.markdown-body .katex-display {
+    margin: 0;
+}
+
+/* ---------- Print ---------- */
+
+@media print {
+    html, body {
+        height: auto;
+        overflow: visible;
+        background: #fff;
+    }
+
+    .app, .main, .body, .content {
+        display: block;
+        height: auto;
+        overflow: visible;
+    }
+
+    .sidebar, .toc, .tabbar, .findbar, .toast, .welcome,
+    .markdown-body .code-copy {
+        display: none !important;
+    }
+
+    .markdown-body {
+        max-width: none;
+        padding: 0;
+        zoom: 1 !important;
+    }
+
+    .markdown-body pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+        break-after: avoid;
+    }
+
+    .markdown-body pre, .markdown-body table, .markdown-body .mermaid-block,
+    .markdown-body img, .markdown-body .markdown-alert {
+        break-inside: avoid;
+    }
+}

@@ -50,6 +50,10 @@ export function RevealInExplorer(arg1) {
   return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
 
+export function SaveHTML(arg1, arg2) {
+  return window['go']['main']['App']['SaveHTML'](arg1, arg2);
+}
+
 export function SaveSession(arg1) {
   return window['go']['main']['App']['SaveSession'](arg1);
 }
