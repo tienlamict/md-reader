@@ -1,7 +1,9 @@
 import './style.css';
 
+import type {EditorState} from '@codemirror/state';
 import {
     AddRecentFile,
+    DefaultFormat,
     GetRecentFiles,
     GetSession,
     GetStartupArgs,
@@ -10,20 +12,28 @@ import {
     LoadFile,
     OpenFileDialog,
     OpenFolderDialog,
+    Quit,
+    ReadSource,
+    RenderMarkdown,
     RevealInExplorer,
     ResolveLink,
+    SaveAsDialog,
+    SaveFile,
     SaveHTML,
     SaveSession,
+    SetDirtyCount,
     WatchFiles,
 } from '../wailsjs/go/main/App';
+import type {textfile} from '../wailsjs/go/models';
 import {BrowserOpenURL, EventsOn, WindowSetTitle} from '../wailsjs/runtime/runtime';
-import {addCopyButtons, handleCopyClick, renderMath, renderMermaid} from './enhance';
+import type {MarkdownEditor} from './editor';
+import {addCopyButtons, fillMermaidFromCache, handleCopyClick, renderMath, renderMermaid} from './enhance';
 import {buildStandaloneHtml} from './export';
 import {FindBar} from './find';
 import {addHighlightCss, applyTheme, isDark, onAppearanceChange, type Theme} from './theme';
 import {type HeadingInfo, Toc} from './toc';
 import {FileTree} from './tree';
-import {baseName, escapeHtml, icon, samePath, showError, showToast} from './ui';
+import {ask, baseName, escapeHtml, icon, isModalOpen, samePath, showError, showToast} from './ui';
 
 // ---------- Elements ----------
 
@@ -32,9 +42,17 @@ const appEl = $('app');
 const contentEl = $('content');
 const docEl = $('doc');
 const welcomeEl = $('welcome');
+const tabstripEl = $('tabstrip');
 const tabbarEl = $('tabbar');
+const modeSwitchEl = $('mode-switch');
+const workspaceEl = $('workspace');
+const editorHostEl = $('editor-host');
+const editorStatusEl = $('editor-status');
+const conflictBarEl = $('conflict-bar');
 
 // ---------- State ----------
+
+type Mode = 'view' | 'edit' | 'split';
 
 interface HistoryEntry {
     path: string;
@@ -43,7 +61,7 @@ interface HistoryEntry {
 
 interface Tab {
     id: number;
-    path: string;
+    path: string; // '' for a new file that was never saved
     name: string;
     html: string;
     headings: HeadingInfo[];
@@ -51,6 +69,15 @@ interface Tab {
     back: HistoryEntry[];
     forward: HistoryEntry[];
     missing: boolean; // file deleted/unreadable since it was loaded
+
+    mode: Mode;
+    lastEditMode: 'edit' | 'split';
+    editor: EditorState | null; // created the first time the tab is edited
+    editorTop: number; // line at the top of the editor
+    savedText: string | null; // text on disk at the last load/save ("\n" line endings)
+    format: textfile.Format | null; // encoding + line endings to save with
+    dirty: boolean;
+    conflict: boolean; // changed on disk while it had unsaved edits
 }
 
 const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
@@ -63,15 +90,105 @@ const state = {
     showToc: true,
 };
 let nextTabId = 1;
+let untitledCount = 0;
 
-const toc = new Toc($('toc-list'), contentEl, docEl, (id) => scrollToAnchor(id));
+function newTab(path: string, name = baseName(path)): Tab {
+    return {
+        id: nextTabId++, path, name, html: '', headings: [], scrollTop: 0, back: [], forward: [], missing: false,
+        mode: 'view', lastEditMode: 'split', editor: null, editorTop: 1, savedText: null, format: null,
+        dirty: false, conflict: false,
+    };
+}
+
+const toc = new Toc($('toc-list'), contentEl, docEl, (id) => jumpToHeading(id));
 const find = new FindBar($('findbar'), docEl, contentEl);
 const tree = new FileTree($('tree'), $('folder-name'), $('tree-empty'), {
     onOpen: (path, newTab) => openFile(path, {newTab}),
     onError: showError,
 });
 
-// ---------- Session ----------
+// ---------- Editor (loaded on first use) ----------
+
+let editor: MarkdownEditor | null = null;
+
+async function ensureEditor(): Promise<MarkdownEditor> {
+    if (!editor) {
+        const {MarkdownEditor} = await import('./editor');
+        editor = new MarkdownEditor(editorHostEl, {
+            onChange: onEditorChange,
+            onScroll: onEditorScroll,
+            onCursor: renderEditorStatus,
+        });
+    }
+    return editor;
+}
+
+/** Loads the file text into the tab so it can be edited. */
+async function prepareEditing(tab: Tab) {
+    const ed = await ensureEditor();
+    if (tab.editor) return;
+    if (!tab.path) {
+        tab.savedText = '';
+        tab.format = await DefaultFormat();
+        tab.editor = ed.createState('');
+        return;
+    }
+    const src = await ReadSource(tab.path);
+    tab.savedText = src.text;
+    tab.format = src.format;
+    tab.editor = ed.createState(src.text);
+    tab.editorTop = 1;
+}
+
+/** Whether the tab shows the editor (edit or split mode). */
+const editing = (tab: Tab | null): tab is Tab => !!tab && tab.mode !== 'view' && !!tab.editor && !!editor;
+
+// The single editor view holds the state of exactly one tab at a time: its
+// owner. Edits are always attributed to the owner, never to whichever tab
+// happens to be active.
+let editorOwner: Tab | null = null;
+
+/** Copies the live editor state back into the tab that owns the editor. */
+function stashEditor() {
+    const owner = editorOwner;
+    if (!owner || !editor || !owner.editor) return;
+    owner.editor = editor.state;
+    if (owner === state.active && owner.mode !== 'view') owner.editorTop = editor.topLine();
+}
+
+/** Loads a tab's editor state into the editor view. */
+function attachEditor(tab: Tab) {
+    if (!editor || !tab.editor || editorOwner === tab) return;
+    stashEditor();
+    editor.setState(tab.editor);
+    editorOwner = tab;
+}
+
+function releaseEditor(tab: Tab) {
+    if (editorOwner !== tab) return;
+    stashEditor();
+    editorOwner = null;
+    editor?.setState(editor.createState(''));
+}
+
+/** The current text of a tab: the live editor's if it owns the editor. */
+function currentText(tab: Tab): string | null {
+    if (tab === editorOwner && editor) return editor.text();
+    return tab.editor ? tab.editor.doc.toString() : null;
+}
+
+const ENCODING_NAMES: Record<string, string> = {
+    'utf-8': 'UTF-8', 'utf-8-bom': 'UTF-8 có BOM', 'utf-16le': 'UTF-16 LE', 'utf-16be': 'UTF-16 BE',
+};
+
+function renderEditorStatus(line: number, col: number) {
+    const f = state.active?.format;
+    const parts = [`Dòng ${line}, Cột ${col}`];
+    if (f) parts.push(ENCODING_NAMES[f.encoding] ?? f.encoding, f.lineEnding === '\r\n' ? 'CRLF' : 'LF');
+    editorStatusEl.textContent = parts.join('  ·  ');
+}
+
+// ---------- Session & dirty state ----------
 
 let saveTimer: number | undefined;
 
@@ -79,7 +196,7 @@ function saveSession() {
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
         SaveSession({
-            tabs: state.tabs.map((t) => t.path),
+            tabs: state.tabs.filter((t) => t.path).map((t) => t.path),
             active: state.active?.path ?? '',
             folder: tree.root,
             showSidebar: state.showSidebar,
@@ -90,8 +207,16 @@ function saveSession() {
 }
 
 function syncWatch() {
-    const paths = [...new Map(state.tabs.map((t) => [t.path.toLowerCase(), t.path])).values()];
+    const paths = [...new Map(state.tabs.filter((t) => t.path).map((t) => [t.path.toLowerCase(), t.path])).values()];
     WatchFiles(paths).catch(showError);
+}
+
+function setDirty(tab: Tab, dirty: boolean) {
+    if (tab.dirty === dirty) return;
+    tab.dirty = dirty;
+    renderTabbar();
+    updateTitle();
+    SetDirtyCount(state.tabs.filter((t) => t.dirty).length).catch(showError);
 }
 
 // ---------- Rendering ----------
@@ -109,13 +234,22 @@ function rewriteImages(docPath: string) {
 
 function renderTabbar() {
     tabbarEl.innerHTML = state.tabs.map((t) => `
-        <div class="tab${t === state.active ? ' active' : ''}${t.missing ? ' missing' : ''}" role="tab"
-             aria-selected="${t === state.active}" data-id="${t.id}" title="${escapeHtml(t.path)}">
+        <div class="tab${t === state.active ? ' active' : ''}${t.missing ? ' missing' : ''}${t.dirty ? ' dirty' : ''}" role="tab"
+             aria-selected="${t === state.active}" data-id="${t.id}" title="${escapeHtml(t.path || t.name)}">
             ${icon('file', 'tab-icon')}<span class="tab-name">${escapeHtml(t.name)}</span>
-            <button type="button" class="tab-close" data-close="${t.id}" title="Đóng (Ctrl+W)" aria-label="Đóng ${escapeHtml(t.name)}">${icon('close')}</button>
+            <button type="button" class="tab-close" data-close="${t.id}" title="Đóng (Ctrl+W)"
+                aria-label="Đóng ${escapeHtml(t.name)}${t.dirty ? ' (chưa lưu)' : ''}"><span class="dirty-dot" aria-hidden="true"></span>${icon('close')}</button>
         </div>`).join('');
-    tabbarEl.hidden = state.tabs.length === 0;
+    tabstripEl.hidden = state.tabs.length === 0;
     tabbarEl.querySelector('.tab.active')?.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    modeSwitchEl.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.mode === state.active?.mode));
+    });
+}
+
+function updateTitle() {
+    const tab = state.active;
+    WindowSetTitle(tab ? `${tab.dirty ? '● ' : ''}${tab.name} - MD Reader` : 'MD Reader');
 }
 
 async function renderWelcome() {
@@ -128,31 +262,47 @@ async function renderWelcome() {
         </button></li>`).join('');
 }
 
-/** Shows the active tab's document (or the welcome screen). */
+/** Shows the active tab (preview and/or editor) or the welcome screen. */
 function renderActive() {
     const tab = state.active;
     renderTabbar();
+    updateTitle();
+    conflictBarEl.hidden = !tab?.conflict;
     if (!tab) {
+        workspaceEl.dataset.mode = 'view';
         docEl.hidden = true;
         docEl.innerHTML = '';
         welcomeEl.hidden = false;
         toc.set([]);
         tree.setActive('');
         find.close();
-        WindowSetTitle('MD Reader');
         renderWelcome();
         return;
     }
+    workspaceEl.dataset.mode = tab.mode;
+    if (editing(tab)) {
+        const switched = editorOwner !== tab;
+        attachEditor(tab);
+        const top = tab.editorTop;
+        if (switched) requestAnimationFrame(() => editor!.scrollToLine(top));
+    } else if (editor?.view.hasFocus) {
+        (document.activeElement as HTMLElement | null)?.blur(); // hidden editor must not take keys
+    }
+    renderPreview(tab, tab.scrollTop);
+    toc.set(tab.headings);
+    tree.setActive(tab.path);
+    if (tab.mode === 'edit') find.close();
+}
+
+function renderPreview(tab: Tab, scrollTop: number) {
     welcomeEl.hidden = true;
     docEl.hidden = false;
     docEl.innerHTML = tab.html;
     rewriteImages(tab.path);
-    contentEl.scrollTop = tab.scrollTop;
-    toc.set(tab.headings);
-    tree.setActive(tab.path);
+    fillMermaidFromCache(docEl, isDark());
+    contentEl.scrollTop = scrollTop;
     find.refresh();
-    WindowSetTitle(`${tab.name} - MD Reader`);
-    enhanceDoc(tab.scrollTop);
+    enhanceDoc(scrollTop);
 }
 
 let enhanceSeq = 0;
@@ -163,8 +313,8 @@ for (const ev of ['wheel', 'keydown', 'mousedown', 'touchstart']) {
 
 /**
  * Adds copy buttons, then typesets math and diagrams (asynchronous). They
- * change the page height, so the scroll position is restored again unless the
- * user has scrolled in the meantime.
+ * change the page height, so the scroll position is restored afterwards
+ * (in split mode: re-synced with the editor) unless the user has scrolled.
  */
 async function enhanceDoc(scrollTop: number) {
     const seq = ++enhanceSeq;
@@ -178,7 +328,8 @@ async function enhanceDoc(scrollTop: number) {
         showError(err);
     }
     if (seq !== enhanceSeq) return;
-    if (!userScrolled && scrollTop > 0) contentEl.scrollTop = scrollTop;
+    if (state.active?.mode === 'split') syncPreviewFromEditor();
+    else if (!userScrolled && scrollTop > 0) contentEl.scrollTop = scrollTop;
     find.refresh();
     toc.updateActive();
 }
@@ -186,26 +337,6 @@ async function enhanceDoc(scrollTop: number) {
 onAppearanceChange((dark) => {
     if (!docEl.hidden) renderMermaid(docEl, dark);
 });
-
-// ---------- Print & export ----------
-
-async function printDoc() {
-    if (!state.active) return;
-    // Paper is white: re-draw dark diagrams in light colours while printing.
-    const recolor = isDark() && docEl.querySelector('.mermaid-block') !== null;
-    if (recolor) await renderMermaid(docEl, false);
-    window.print();
-    if (recolor) await renderMermaid(docEl, isDark());
-}
-
-async function exportHtml() {
-    const tab = state.active;
-    if (!tab) return;
-    const title = tab.headings.find((h) => h.level === 1)?.text || tab.name;
-    const html = await buildStandaloneHtml(docEl, title, isDark());
-    const saved = await SaveHTML(tab.path, html);
-    if (saved) showToast(`Đã lưu ${saved}`, 'info', 4000);
-}
 
 function scrollToAnchor(fragment: string): boolean {
     if (!fragment) return false;
@@ -218,15 +349,169 @@ function scrollToAnchor(fragment: string): boolean {
     return true;
 }
 
+function jumpToHeading(id: string) {
+    const tab = state.active;
+    if (tab?.mode === 'edit' && editor) {
+        const h = tab.headings.find((x) => x.id === id);
+        if (h?.line) editor.revealLine(h.line);
+        return;
+    }
+    scrollToAnchor(id);
+}
+
 function applyLayout() {
     appEl.classList.toggle('no-sidebar', !state.showSidebar);
     appEl.classList.toggle('no-toc', !state.showToc);
     docEl.style.zoom = String(state.zoom);
+    workspaceEl.style.setProperty('--zoom', String(state.zoom));
+}
+
+// ---------- Live preview & scroll sync ----------
+
+let previewTimer: number | undefined;
+
+function onEditorChange() {
+    const tab = editorOwner;
+    if (!tab) return;
+    setDirty(tab, true); // exact check happens in refreshPreview
+    window.clearTimeout(previewTimer);
+    previewTimer = window.setTimeout(refreshPreview, 150);
+}
+
+async function refreshPreview() {
+    const tab = editorOwner;
+    if (!tab || !editor) return;
+    const text = editor.text();
+    setDirty(tab, text !== tab.savedText);
+    let res;
+    try {
+        res = await RenderMarkdown(text);
+    } catch (err) {
+        showError(err);
+        return;
+    }
+    tab.html = res.html;
+    tab.headings = res.headings ?? [];
+    if (tab !== state.active) return;
+    toc.set(tab.headings);
+    if (tab.mode === 'split') renderPreview(tab, contentEl.scrollTop);
+}
+
+// When one side is scrolled by code, ignore its own scroll events briefly so
+// the two panes do not keep pushing each other.
+let quiet = {side: '', until: 0};
+
+function scrollQuietly(side: 'editor' | 'preview', fn: () => void) {
+    quiet = {side, until: performance.now() + 150};
+    fn();
+}
+
+const isQuiet = (side: string) => quiet.side === side && performance.now() < quiet.until;
+
+interface Anchor {
+    line: number;
+    y: number;
+}
+
+/** Preview positions of the blocks that carry their source line (data-line). */
+function lineAnchors(): Anchor[] {
+    const base = contentEl.getBoundingClientRect().top - contentEl.scrollTop;
+    const anchors: Anchor[] = [{line: 1, y: 0}];
+    for (const el of docEl.querySelectorAll<HTMLElement>('[data-line]')) {
+        const line = Number(el.dataset.line);
+        const y = el.getBoundingClientRect().top - base - 8;
+        const last = anchors[anchors.length - 1];
+        if (line > last.line && y > last.y) anchors.push({line, y});
+    }
+    const lines = editor?.state.doc.lines ?? anchors[anchors.length - 1].line;
+    anchors.push({line: lines + 1, y: contentEl.scrollHeight - contentEl.clientHeight});
+    return anchors;
+}
+
+function previewYForLine(line: number): number {
+    const a = lineAnchors();
+    let i = 0;
+    while (i < a.length - 2 && a[i + 1].line <= line) i++;
+    const [p, n] = [a[i], a[i + 1]];
+    return p.y + (n.y - p.y) * Math.min(1, Math.max(0, (line - p.line) / (n.line - p.line)));
+}
+
+function lineForPreviewY(y: number): number {
+    const a = lineAnchors();
+    let i = 0;
+    while (i < a.length - 2 && a[i + 1].y <= y) i++;
+    const [p, n] = [a[i], a[i + 1]];
+    return p.line + (n.line - p.line) * Math.min(1, Math.max(0, (y - p.y) / Math.max(1, n.y - p.y)));
+}
+
+function syncPreviewFromEditor() {
+    if (!editor || state.active?.mode !== 'split') return;
+    const y = editor.atBottom() ? contentEl.scrollHeight : previewYForLine(editor.topLine());
+    scrollQuietly('preview', () => (contentEl.scrollTop = y));
+}
+
+function syncEditorFromPreview() {
+    if (!editor || state.active?.mode !== 'split') return;
+    const atBottom = contentEl.scrollTop + contentEl.clientHeight >= contentEl.scrollHeight - 2;
+    scrollQuietly('editor', () => {
+        if (atBottom) editor!.scrollToBottom();
+        else editor!.scrollToLine(lineForPreviewY(contentEl.scrollTop));
+    });
+}
+
+let syncFrame = 0;
+
+function onEditorScroll() {
+    if (isQuiet('editor')) return;
+    cancelAnimationFrame(syncFrame);
+    syncFrame = requestAnimationFrame(syncPreviewFromEditor);
+}
+
+contentEl.addEventListener('scroll', () => {
+    if (isQuiet('preview')) return;
+    cancelAnimationFrame(syncFrame);
+    syncFrame = requestAnimationFrame(syncEditorFromPreview);
+}, {passive: true});
+
+// ---------- Modes ----------
+
+async function setMode(mode: Mode) {
+    const tab = state.active;
+    if (!tab || tab.mode === mode) return;
+    if (mode !== 'view') {
+        try {
+            await prepareEditing(tab);
+        } catch (err) {
+            showError(err);
+            return;
+        }
+        tab.lastEditMode = mode;
+    }
+    // Keep showing the same part of the document in the new layout.
+    const line = editing(tab) ? editor!.topLine() : lineForPreviewY(contentEl.scrollTop);
+    stashEditor();
+    tab.scrollTop = contentEl.scrollTop;
+    tab.mode = mode;
+    renderActive();
+    requestAnimationFrame(() => {
+        if (editing(tab)) {
+            editor!.scrollToLine(line);
+            editor!.focus();
+        } else {
+            contentEl.scrollTop = previewYForLine(line);
+        }
+    });
+}
+
+function toggleEdit() {
+    const tab = state.active;
+    if (tab) setMode(tab.mode === 'view' ? tab.lastEditMode : 'view');
 }
 
 // ---------- Tabs ----------
 
 function rememberScroll() {
+    stashEditor();
     if (state.active) state.active.scrollTop = contentEl.scrollTop;
 }
 
@@ -243,9 +528,19 @@ async function loadInto(tab: Tab, path: string) {
     Object.assign(tab, {path: doc.path, name: doc.name, html: doc.html, headings: doc.headings ?? [], missing: false});
 }
 
+/** Forgets the editor of an unmodified tab (e.g. before it shows another file). */
+function dropEditor(tab: Tab) {
+    if (editorOwner === tab) editorOwner = null;
+    tab.editor = null;
+    tab.savedText = null;
+    tab.format = null;
+    tab.mode = 'view';
+    tab.conflict = false;
+}
+
 interface OpenOptions {
     fragment?: string;
-    newTab?: boolean; // open beside the current tab even if called from a link
+    newTab?: boolean;
     recent?: boolean; // add to the recent files list (default true)
     activate?: boolean; // default true
 }
@@ -253,9 +548,9 @@ interface OpenOptions {
 /** Opens a file in its existing tab or a new one. */
 async function openFile(path: string, opts: OpenOptions = {}) {
     try {
-        let tab = state.tabs.find((t) => samePath(t.path, path));
+        let tab = state.tabs.find((t) => t.path && samePath(t.path, path));
         if (!tab) {
-            tab = {id: nextTabId++, path, name: baseName(path), html: '', headings: [], scrollTop: 0, back: [], forward: [], missing: false};
+            tab = newTab(path);
             await loadInto(tab, path);
             const at = state.active ? state.tabs.indexOf(state.active) + 1 : state.tabs.length;
             state.tabs.splice(at, 0, tab);
@@ -267,25 +562,34 @@ async function openFile(path: string, opts: OpenOptions = {}) {
             saveSession();
             return;
         }
-        if (tab === state.active) {
-            if (opts.fragment) scrollToAnchor(opts.fragment);
-            return;
-        }
-        activate(tab);
+        if (tab !== state.active) activate(tab);
         if (opts.fragment) scrollToAnchor(opts.fragment);
     } catch (err) {
         showError(err);
     }
 }
 
+function newFile() {
+    rememberScroll();
+    untitledCount++;
+    const tab = newTab('', `Chưa đặt tên-${untitledCount}.md`);
+    const at = state.active ? state.tabs.indexOf(state.active) + 1 : state.tabs.length;
+    state.tabs.splice(at, 0, tab);
+    state.active = tab;
+    renderActive();
+    setMode('split');
+}
+
 /** Follows a link inside the active tab, keeping back/forward history. */
 async function navigate(path: string, fragment = '') {
     const tab = state.active;
     if (!tab) return openFile(path, {fragment});
-    if (samePath(tab.path, path)) {
-        scrollToAnchor(fragment);
+    if (tab.path && samePath(tab.path, path)) {
+        if (!scrollToAnchor(fragment)) jumpToHeading(fragment);
         return;
     }
+    // Never replace a document that has unsaved edits: open the link beside it.
+    if (tab.dirty || !tab.path) return openFile(path, {fragment});
     const here = {path: tab.path, scrollTop: contentEl.scrollTop};
     try {
         await loadInto(tab, path);
@@ -293,6 +597,7 @@ async function navigate(path: string, fragment = '') {
         showError(err);
         return;
     }
+    dropEditor(tab);
     tab.back.push(here);
     tab.forward.length = 0;
     tab.scrollTop = 0;
@@ -305,7 +610,7 @@ async function navigate(path: string, fragment = '') {
 
 async function goHistory(dir: 'back' | 'forward') {
     const tab = state.active;
-    if (!tab) return;
+    if (!tab || tab.dirty) return;
     const from = dir === 'back' ? tab.back : tab.forward;
     const to = dir === 'back' ? tab.forward : tab.back;
     const entry = from.pop();
@@ -318,6 +623,7 @@ async function goHistory(dir: 'back' | 'forward') {
         showError(err);
         return;
     }
+    dropEditor(tab);
     to.push(here);
     tab.scrollTop = entry.scrollTop;
     renderActive();
@@ -325,17 +631,34 @@ async function goHistory(dir: 'back' | 'forward') {
     saveSession();
 }
 
-function closeTab(tab: Tab | null = state.active) {
+/** Asks what to do with unsaved changes. Returns false if the user cancelled. */
+async function resolveUnsaved(tab: Tab): Promise<boolean> {
+    if (!tab.dirty) return true;
+    const choice = await ask(
+        `Lưu thay đổi của ${tab.name}?`,
+        'Nếu không lưu, các thay đổi sẽ bị mất.',
+        [{id: 'save', label: 'Lưu', primary: true}, {id: 'discard', label: 'Không lưu', danger: true}, {id: 'cancel', label: 'Huỷ'}],
+    );
+    if (choice === 'save') return save(tab);
+    return choice === 'discard';
+}
+
+async function closeTab(tab: Tab | null | undefined = state.active) {
     if (!tab) return;
+    stashEditor();
+    if (!(await resolveUnsaved(tab))) return;
     const i = state.tabs.indexOf(tab);
+    if (i < 0) return;
+    releaseEditor(tab);
     state.tabs.splice(i, 1);
     if (tab === state.active) {
-        state.active = null; // don't remember the scroll of a closed tab
+        state.active = null; // don't stash the editor of a closed tab
         activate(state.tabs[i] ?? state.tabs[i - 1] ?? null);
         if (!state.active) renderActive();
     } else {
         renderTabbar();
     }
+    SetDirtyCount(state.tabs.filter((t) => t.dirty).length).catch(showError);
     syncWatch();
     saveSession();
 }
@@ -346,27 +669,136 @@ function cycleTab(dir: number) {
     activate(state.tabs[(i + dir + state.tabs.length) % state.tabs.length]);
 }
 
-/** Reloads tabs showing `path` after it changed on disk (or on F5). */
-async function reloadPath(path: string, manual = false) {
-    for (const tab of state.tabs.filter((t) => samePath(t.path, path))) {
-        try {
-            await loadInto(tab, tab.path);
-        } catch (err) {
-            if (manual || !tab.missing) showError(`Không đọc được ${tab.name}: file đã bị xoá, đổi tên hoặc đang bị khoá.`);
-            tab.missing = true;
-            renderTabbar();
-            continue;
+// ---------- Saving ----------
+
+async function save(tab: Tab | null = state.active, saveAs = false): Promise<boolean> {
+    if (!tab) return false;
+    stashEditor();
+    try {
+        if (!tab.editor && !saveAs) return true; // never edited: nothing to save
+        if (!tab.editor) await prepareEditing(tab); // "save as" of a file only viewed
+        const text = tab.editor!.doc.toString();
+        let path = tab.path;
+        if (saveAs || !path) {
+            path = await SaveAsDialog(path || tab.name);
+            if (!path) return false;
         }
-        if (tab === state.active) {
-            const top = contentEl.scrollTop;
-            tab.scrollTop = top;
-            renderActive();
-            contentEl.scrollTop = top;
-        } else {
+        const format = tab.format ?? await DefaultFormat();
+        await SaveFile(path, text, format);
+        const renamed = path !== tab.path;
+        Object.assign(tab, {path, name: baseName(path), savedText: text, format, conflict: false, missing: false});
+        setDirty(tab, false);
+        if (tab === state.active) conflictBarEl.hidden = true;
+        if (renamed) {
+            AddRecentFile(path).catch(showError);
+            syncWatch();
+            saveSession();
+            if (tree.root) tree.refresh();
             renderTabbar();
+            updateTitle();
         }
+        showToast(`Đã lưu ${tab.name}`, 'info');
+        return true;
+    } catch (err) {
+        showError(err);
+        return false;
     }
 }
+
+// ---------- Changes on disk ----------
+
+/** Reloads tabs showing `path` after it changed on disk (or on F5). */
+async function reloadPath(path: string, manual = false) {
+    for (const tab of state.tabs.filter((t) => t.path && samePath(t.path, path))) {
+        if (tab.editor) {
+            let src;
+            try {
+                src = await ReadSource(tab.path);
+            } catch {
+                markMissing(tab, manual);
+                continue;
+            }
+            if (src.text === tab.savedText && !manual) continue; // e.g. our own save
+            const mine = currentText(tab);
+            if (tab.dirty && src.text !== mine && !manual) {
+                tab.conflict = true; // let the user decide (see the conflict bar)
+                if (tab === state.active) conflictBarEl.hidden = false;
+                continue;
+            }
+            applyDiskText(tab, src.text, src.format);
+        }
+        try {
+            await loadInto(tab, tab.path);
+        } catch {
+            markMissing(tab, manual);
+            continue;
+        }
+        if (tab === state.active) renderPreview(tab, contentEl.scrollTop);
+        else renderTabbar();
+    }
+}
+
+function markMissing(tab: Tab, manual: boolean) {
+    if (manual || !tab.missing) showError(`Không đọc được ${tab.name}: file đã bị xoá, đổi tên hoặc đang bị khoá.`);
+    tab.missing = true;
+    renderTabbar();
+}
+
+/** Puts the disk version into the editor (undoable) and marks it saved. */
+function applyDiskText(tab: Tab, text: string, format: textfile.Format) {
+    tab.savedText = text;
+    tab.format = format;
+    tab.conflict = false;
+    if (tab === editorOwner && editor) {
+        editor.replaceText(text); // undoable
+    } else if (editor) {
+        tab.editor = editor.createState(text);
+    }
+    if (tab === state.active) conflictBarEl.hidden = true;
+    setDirty(tab, false);
+}
+
+async function reloadCurrent() {
+    const tab = state.active;
+    if (!tab?.path) return;
+    stashEditor();
+    if (tab.dirty) {
+        const choice = await ask(`Tải lại ${tab.name}?`, 'Các thay đổi chưa lưu sẽ bị mất.',
+            [{id: 'reload', label: 'Tải lại', danger: true}, {id: 'cancel', label: 'Huỷ', primary: true}]);
+        if (choice !== 'reload') return;
+    }
+    await reloadPath(tab.path, true);
+}
+
+conflictBarEl.addEventListener('click', async (e) => {
+    const act = (e.target as Element).closest<HTMLElement>('[data-act]')?.dataset.act;
+    const tab = state.active;
+    if (!tab || !act) return;
+    if (act === 'keep') {
+        tab.conflict = false; // the next save overwrites the disk version
+        conflictBarEl.hidden = true;
+    } else if (act === 'reload') {
+        await reloadPath(tab.path, true);
+    }
+});
+
+// ---------- Quit ----------
+
+EventsOn('app:quit-requested', async (count: number) => {
+    stashEditor();
+    const choice = await ask(
+        `Có ${count} file chưa lưu`,
+        'Bạn muốn lưu các thay đổi trước khi thoát không?',
+        [{id: 'save', label: 'Lưu tất cả', primary: true}, {id: 'discard', label: 'Thoát không lưu', danger: true}, {id: 'cancel', label: 'Huỷ'}],
+    );
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+        for (const tab of state.tabs.filter((t) => t.dirty)) {
+            if (!(await save(tab))) return; // cancelled "save as" or failed: stay open
+        }
+    }
+    Quit();
+});
 
 // ---------- Folder ----------
 
@@ -411,14 +843,44 @@ function zoomStep(dir: number) {
     if (next) setZoom(next);
 }
 
+// ---------- Print & export ----------
+
+async function printDoc() {
+    if (!state.active) return;
+    // Paper is white: re-draw dark diagrams in light colours while printing.
+    const recolor = isDark() && docEl.querySelector('.mermaid-block') !== null;
+    if (recolor) await renderMermaid(docEl, false);
+    window.print();
+    if (recolor) await renderMermaid(docEl, isDark());
+}
+
+async function exportHtml() {
+    const tab = state.active;
+    if (!tab) return;
+    const title = tab.headings.find((h) => h.level === 1)?.text || tab.name;
+    const html = await buildStandaloneHtml(docEl, title, isDark());
+    const saved = await SaveHTML(tab.path || tab.name, html);
+    if (saved) showToast(`Đã lưu ${saved}`, 'info', 4000);
+}
+
 // ---------- Commands ----------
 
 const commands: Record<string, () => unknown> = {
+    'new-file': newFile,
     'open-file': pickFile,
     'open-folder': pickFolder,
-    'reload': () => state.active && reloadPath(state.active.path, true),
+    'save': () => save(),
+    'save-as': () => save(state.active, true),
+    'reload': reloadCurrent,
     'close-tab': () => closeTab(),
-    'find': () => state.active && find.open(),
+    'find': () => {
+        if (state.active?.mode === 'edit') editor?.openSearch();
+        else if (state.active) find.open();
+    },
+    'mode-view': () => setMode('view'),
+    'mode-edit': () => setMode('edit'),
+    'mode-split': () => setMode('split'),
+    'toggle-edit': toggleEdit,
     'toggle-sidebar': () => {
         state.showSidebar = !state.showSidebar;
         applyLayout();
@@ -446,15 +908,22 @@ function run(name: string) {
     Promise.resolve(cmd()).catch(showError);
 }
 
-/** Shortcut table: [ctrl, shift, alt, KeyboardEvent.code or key] -> command. */
+/** Shortcut table: [ctrl, shift, alt, KeyboardEvent.code] -> command. */
 const shortcuts: [boolean, boolean, boolean, string, string][] = [
+    [true, false, false, 'KeyN', 'new-file'],
     [true, false, false, 'KeyO', 'open-file'],
     [true, true, false, 'KeyO', 'open-folder'],
+    [true, false, false, 'KeyS', 'save'],
+    [true, true, false, 'KeyS', 'save-as'],
     [false, false, false, 'F5', 'reload'],
     [true, false, false, 'KeyW', 'close-tab'],
     [true, false, false, 'F4', 'close-tab'],
     [true, false, false, 'KeyF', 'find'],
     [false, false, false, 'F3', 'find'],
+    [true, false, false, 'Digit1', 'mode-view'],
+    [true, false, false, 'Digit2', 'mode-edit'],
+    [true, false, false, 'Digit3', 'mode-split'],
+    [true, false, false, 'KeyE', 'toggle-edit'],
     [true, false, false, 'KeyB', 'toggle-sidebar'],
     [true, true, false, 'KeyM', 'toggle-toc'],
     [true, false, false, 'Equal', 'zoom-in'],
@@ -475,15 +944,16 @@ const shortcuts: [boolean, boolean, boolean, string, string][] = [
 ];
 
 window.addEventListener('keydown', (e) => {
+    // Keys the editor (or a dialog) already handled are left alone.
+    if (e.defaultPrevented || isModalOpen()) return;
     const hit = shortcuts.find(([c, s, a, code]) =>
         c === e.ctrlKey && s === e.shiftKey && a === e.altKey && code === e.code);
     if (!hit) return;
-    // Let text fields keep their own editing keys (except find/zoom/tab shortcuts).
     e.preventDefault();
     run(hit[4]);
 });
 
-contentEl.addEventListener('wheel', (e) => {
+workspaceEl.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return;
     e.preventDefault();
     zoomStep(e.deltaY < 0 ? 1 : -1);
@@ -533,19 +1003,21 @@ window.addEventListener('mouseup', (e) => {
     if (e.button === 4) run('forward');
 });
 
+const tabById = (id: string | undefined) => state.tabs.find((t) => t.id === Number(id));
+
 tabbarEl.addEventListener('click', (e) => {
     const target = e.target as Element;
     const close = target.closest<HTMLElement>('[data-close]');
     if (close) {
-        closeTab(state.tabs.find((t) => t.id === Number(close.dataset.close)));
+        closeTab(tabById(close.dataset.close));
         return;
     }
     const el = target.closest<HTMLElement>('.tab');
-    if (el) activate(state.tabs.find((t) => t.id === Number(el.dataset.id)) ?? null);
+    if (el) activate(tabById(el.dataset.id) ?? null);
 });
 tabbarEl.addEventListener('auxclick', (e) => {
     const el = (e.target as Element).closest<HTMLElement>('.tab');
-    if (el && e.button === 1) closeTab(state.tabs.find((t) => t.id === Number(el.dataset.id)));
+    if (el && e.button === 1) closeTab(tabById(el.dataset.id));
 });
 tabbarEl.addEventListener('wheel', (e) => {
     if (e.deltaY && !e.ctrlKey) {
@@ -554,6 +1026,12 @@ tabbarEl.addEventListener('wheel', (e) => {
     }
 }, {passive: false});
 
+const modeIcons: Record<Mode, Parameters<typeof icon>[0]> = {view: 'eye', edit: 'pencil', split: 'columns'};
+modeSwitchEl.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => {
+    b.innerHTML = icon(modeIcons[b.dataset.mode as Mode]);
+    b.addEventListener('click', () => setMode(b.dataset.mode as Mode));
+});
+
 $('recent-list').addEventListener('click', (e) => {
     const item = (e.target as Element).closest<HTMLElement>('[data-path]');
     if (item) openFile(item.dataset.path!);
@@ -561,6 +1039,7 @@ $('recent-list').addEventListener('click', (e) => {
 
 $('open-btn').addEventListener('click', pickFile);
 $('open-folder-btn').addEventListener('click', pickFolder);
+$('new-btn').addEventListener('click', newFile);
 $('tree-open').addEventListener('click', pickFolder);
 const folderOpenBtn = $('folder-open');
 folderOpenBtn.innerHTML = icon('folder');
@@ -597,7 +1076,7 @@ async function init() {
     // then open files passed on the command line.
     for (const path of session.tabs ?? []) {
         if (state.tabs.some((t) => samePath(t.path, path))) continue;
-        const tab: Tab = {id: nextTabId++, path, name: baseName(path), html: '', headings: [], scrollTop: 0, back: [], forward: [], missing: false};
+        const tab = newTab(path);
         try {
             await loadInto(tab, path);
             state.tabs.push(tab);
@@ -615,4 +1094,4 @@ async function init() {
 init().catch(showError);
 
 // Hook for manual testing from the dev browser console.
-Object.assign(window, {mdReader: {openFile, openFolder, run, state, buildStandaloneHtml}});
+Object.assign(window, {mdReader: {openFile, openFolder, run, state, buildStandaloneHtml, setMode, save, editor: () => editor}});

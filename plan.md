@@ -86,7 +86,7 @@ md-reader/
 - Diagram mermaid, công thức toán `$...$` / `$$...$$`, nút copy cho code block.
 - In / xuất ra HTML.
 
-### Phase 5: Chế độ sửa (khoảng 2–3 ngày)
+### Phase 5: Chế độ sửa (khoảng 2–3 ngày) — ✅ xong
 
 - 3 chế độ xem cho mỗi tab: **Xem** / **Sửa** / **Chia đôi** (editor bên trái, preview live bên phải).
 - Editor: CodeMirror 6 (highlight cú pháp markdown, số dòng, undo/redo, tìm & thay thế).

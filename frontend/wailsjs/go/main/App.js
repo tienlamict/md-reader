@@ -6,6 +6,10 @@ export function AddRecentFile(arg1) {
   return window['go']['main']['App']['AddRecentFile'](arg1);
 }
 
+export function DefaultFormat() {
+  return window['go']['main']['App']['DefaultFormat']();
+}
+
 export function GetRecentFiles() {
   return window['go']['main']['App']['GetRecentFiles']();
 }
@@ -42,6 +46,18 @@ export function OpenFolderDialog() {
   return window['go']['main']['App']['OpenFolderDialog']();
 }
 
+export function Quit() {
+  return window['go']['main']['App']['Quit']();
+}
+
+export function ReadSource(arg1) {
+  return window['go']['main']['App']['ReadSource'](arg1);
+}
+
+export function RenderMarkdown(arg1) {
+  return window['go']['main']['App']['RenderMarkdown'](arg1);
+}
+
 export function ResolveLink(arg1, arg2) {
   return window['go']['main']['App']['ResolveLink'](arg1, arg2);
 }
@@ -50,12 +66,24 @@ export function RevealInExplorer(arg1) {
   return window['go']['main']['App']['RevealInExplorer'](arg1);
 }
 
+export function SaveAsDialog(arg1) {
+  return window['go']['main']['App']['SaveAsDialog'](arg1);
+}
+
+export function SaveFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveFile'](arg1, arg2, arg3);
+}
+
 export function SaveHTML(arg1, arg2) {
   return window['go']['main']['App']['SaveHTML'](arg1, arg2);
 }
 
 export function SaveSession(arg1) {
   return window['go']['main']['App']['SaveSession'](arg1);
+}
+
+export function SetDirtyCount(arg1) {
+  return window['go']['main']['App']['SetDirtyCount'](arg1);
 }
 
 export function WatchFiles(arg1) {

@@ -49,7 +49,7 @@ func (t *fencedTransformer) Transform(doc *ast.Document, reader text.Reader, _ p
 		case "mermaid":
 			repl = &Mermaid{}
 		case "math":
-			repl = &MathBlock{}
+			repl = &MathBlock{fenced: true}
 		default:
 			continue
 		}
@@ -68,7 +68,7 @@ func (r *mermaidRenderer) render(w util.BufWriter, src []byte, n ast.Node, enter
 	if !entering {
 		return ast.WalkContinue, nil
 	}
-	_, _ = w.WriteString(`<div class="mermaid-block"><pre class="mermaid-source">` +
+	_, _ = w.WriteString(`<div class="mermaid-block"` + lineAttrHTML(n) + `><pre class="mermaid-source">` +
 		html.EscapeString(linesText(n, src)) + "</pre></div>\n")
 	return ast.WalkSkipChildren, nil
 }

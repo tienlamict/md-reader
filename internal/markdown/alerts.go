@@ -108,9 +108,9 @@ func (r *alertRenderer) render(w util.BufWriter, _ []byte, n ast.Node, entering 
 	}
 	info := alertInfo[a.AlertType]
 	fmt.Fprintf(w,
-		"<div class=\"markdown-alert markdown-alert-%s\">\n"+
+		"<div class=\"markdown-alert markdown-alert-%s\"%s>\n"+
 			"<p class=\"markdown-alert-title\"><svg class=\"octicon octicon-%s mr-2\" viewBox=\"0 0 16 16\" version=\"1.1\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"%s\"></path></svg>%s</p>\n",
-		a.AlertType, info.icon, info.path, info.title)
+		a.AlertType, lineAttrHTML(n), info.icon, info.path, info.title)
 	return ast.WalkContinue, nil
 }
 

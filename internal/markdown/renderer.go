@@ -26,6 +26,7 @@ type Heading struct {
 	Level int    `json:"level"`
 	ID    string `json:"id"`
 	Text  string `json:"text"`
+	Line  int    `json:"line"` // 1-based line in the Markdown source
 }
 
 // Result is the output of Render.
@@ -62,6 +63,7 @@ func New() *Renderer {
 				util.Prioritized(&alertTransformer{}, 200),
 				util.Prioritized(&taskListTransformer{}, 300),
 				util.Prioritized(&fencedTransformer{}, 400),
+				util.Prioritized(&lineTransformer{}, 500),
 			),
 		),
 		goldmark.WithRendererOptions(
@@ -94,6 +96,7 @@ func (r *Renderer) Render(src []byte) (Result, error) {
 
 func collectHeadings(doc ast.Node, src []byte) []Heading {
 	headings := []Heading{}
+	idx := newLineIndex(src)
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		h, ok := n.(*ast.Heading)
 		if !ok || !entering {
@@ -101,10 +104,12 @@ func collectHeadings(doc ast.Node, src []byte) []Heading {
 		}
 		id, _ := h.AttributeString("id")
 		idStr, _ := id.([]byte)
+		line, _ := blockLine(h, idx)
 		headings = append(headings, Heading{
 			Level: h.Level,
 			ID:    string(idStr),
 			Text:  plainText(h, src),
+			Line:  line,
 		})
 		return ast.WalkSkipChildren, nil
 	})

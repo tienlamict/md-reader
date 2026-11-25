@@ -4,6 +4,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -47,7 +48,18 @@ func TestGolden(t *testing.T) {
 	}
 }
 
+var dataLine = regexp.MustCompile(` data-line="\d+"`)
+
+// render returns the result with data-line attributes removed, so tests can
+// compare HTML without caring about source positions (see lines_test.go).
 func render(t *testing.T, src string) Result {
+	t.Helper()
+	res := renderWithLines(t, src)
+	res.HTML = dataLine.ReplaceAllString(res.HTML, "")
+	return res
+}
+
+func renderWithLines(t *testing.T, src string) Result {
 	t.Helper()
 	res, err := New().Render([]byte(src))
 	if err != nil {
@@ -59,11 +71,11 @@ func render(t *testing.T, src string) Result {
 func TestHeadingIDs(t *testing.T) {
 	res := render(t, "# Hello World!\n## Hello World!\n## Hello World!\n### Xin chào `Go` & [bạn](x)\n### snake_case-ok\n")
 	want := []Heading{
-		{1, "hello-world", "Hello World!"},
-		{2, "hello-world-1", "Hello World!"},
-		{2, "hello-world-2", "Hello World!"},
-		{3, "xin-chào-go--bạn", "Xin chào Go & bạn"},
-		{3, "snake_case-ok", "snake_case-ok"},
+		{1, "hello-world", "Hello World!", 1},
+		{2, "hello-world-1", "Hello World!", 2},
+		{2, "hello-world-2", "Hello World!", 3},
+		{3, "xin-chào-go--bạn", "Xin chào Go & bạn", 4},
+		{3, "snake_case-ok", "snake_case-ok", 5},
 	}
 	if len(res.Headings) != len(want) {
 		t.Fatalf("got %d headings, want %d: %+v", len(res.Headings), len(want), res.Headings)

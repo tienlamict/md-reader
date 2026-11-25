@@ -85,6 +85,34 @@ let mermaidTheme = '';
 let seq = 0;
 let queue: Promise<void> = Promise.resolve();
 const cache = new Map<string, string>(); // theme + source -> svg
+const CACHE_LIMIT = 200; // live editing creates many versions of a diagram
+
+function remember(key: string, svg: string) {
+    cache.set(key, svg);
+    if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+}
+
+function showSvg(block: HTMLElement, svg: string, theme: string) {
+    block.classList.remove('is-error');
+    block.classList.add('is-rendered');
+    block.dataset.theme = theme;
+    block.innerHTML = svg;
+}
+
+/**
+ * Synchronously puts already-rendered diagrams back, so re-rendering the
+ * preview while typing does not flash the diagram source.
+ */
+export function fillMermaidFromCache(doc: HTMLElement, dark: boolean) {
+    const theme = dark ? 'dark' : 'default';
+    doc.querySelectorAll<HTMLElement>('.mermaid-block:not(.is-rendered)').forEach((block) => {
+        const source = block.dataset.source ?? block.textContent ?? '';
+        const svg = cache.get(`${theme}\n${source}`);
+        if (!svg) return;
+        block.dataset.source = source;
+        showSvg(block, svg, theme);
+    });
+}
 
 /** Renders every diagram in doc. Calls are queued so themes never mix. */
 export function renderMermaid(doc: HTMLElement, dark: boolean): Promise<void> {
@@ -110,6 +138,7 @@ async function doRenderMermaid(doc: HTMLElement, dark: boolean) {
 
     for (const block of blocks) {
         if (!block.isConnected) return; // document was replaced meanwhile
+        if (block.classList.contains('is-rendered') && block.dataset.theme === theme) continue;
         const source = block.dataset.source ?? block.textContent ?? '';
         block.dataset.source = source;
         const key = `${theme}\n${source}`;
@@ -118,7 +147,7 @@ async function doRenderMermaid(doc: HTMLElement, dark: boolean) {
             const id = `mmd-${++seq}`;
             try {
                 svg = (await mermaid.render(id, source)).svg;
-                cache.set(key, svg);
+                remember(key, svg);
             } catch (err) {
                 document.getElementById(id)?.remove();
                 document.getElementById(`d${id}`)?.remove();
@@ -130,8 +159,6 @@ async function doRenderMermaid(doc: HTMLElement, dark: boolean) {
             }
         }
         if (!block.isConnected) return;
-        block.classList.remove('is-error');
-        block.classList.add('is-rendered');
-        block.innerHTML = svg;
+        showSvg(block, svg, theme);
     }
 }

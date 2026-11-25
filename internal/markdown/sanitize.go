@@ -20,6 +20,8 @@ func newPolicy() *bluemonday.Policy {
 	// Heading anchors may contain non-ASCII letters (e.g. Vietnamese).
 	p.AllowAttrs("id").Matching(regexp.MustCompile(`^[\p{L}\p{N}\p{M}_:.\-]+$`)).Globally()
 	p.AllowAttrs("role", "aria-hidden", "tabindex").Globally()
+	// Source line numbers used to sync the editor with the preview.
+	p.AllowAttrs("data-line").Matching(regexp.MustCompile(`^[0-9]+$`)).Globally()
 
 	// Task list checkboxes.
 	p.AllowElements("input")

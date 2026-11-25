@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -18,6 +17,7 @@ import (
 	"md-reader/internal/fstree"
 	"md-reader/internal/links"
 	"md-reader/internal/markdown"
+	"md-reader/internal/textfile"
 	"md-reader/internal/watcher"
 )
 
@@ -54,9 +54,11 @@ type App struct {
 	watcher  *watcher.Watcher
 	args     StartupArgs
 
-	mu      sync.Mutex
-	cfg     config.Config
-	cfgPath string
+	mu         sync.Mutex
+	cfg        config.Config
+	cfgPath    string
+	dirtyCount int  // tabs with unsaved changes (reported by the frontend)
+	allowQuit  bool // set once the frontend has resolved unsaved changes
 }
 
 // NewApp creates the application backend and loads saved preferences.
@@ -142,9 +144,9 @@ func (a *App) LoadFile(path string) (Document, error) {
 	if err != nil {
 		return Document{}, fmt.Errorf("không đọc được file: %w", err)
 	}
-	src = bytes.TrimPrefix(src, []byte("\xef\xbb\xbf")) // UTF-8 BOM
+	text := textfile.DecodeLossy(src) // handles BOMs, UTF-16 and CRLF
 
-	res, err := a.renderer.Render(src)
+	res, err := a.renderer.Render([]byte(text))
 	if err != nil {
 		return Document{}, fmt.Errorf("không render được file: %w", err)
 	}
@@ -324,6 +326,7 @@ func (a *App) buildMenu() *menu.Menu {
 	m := menu.NewMenu()
 
 	file := m.AddSubmenu("Tệp")
+	file.AddText("Mới\tCtrl+N", nil, cmd("new-file"))
 	file.AddText("Mở file…\tCtrl+O", nil, cmd("open-file"))
 	file.AddText("Mở thư mục…\tCtrl+Shift+O", nil, cmd("open-folder"))
 	recent := file.AddSubmenu("Mở gần đây")
@@ -341,6 +344,9 @@ func (a *App) buildMenu() *menu.Menu {
 		recent.AddText("Xoá danh sách", nil, func(*menu.CallbackData) { a.clearRecentFiles() })
 	}
 	file.AddSeparator()
+	file.AddText("Lưu\tCtrl+S", nil, cmd("save"))
+	file.AddText("Lưu thành…\tCtrl+Shift+S", nil, cmd("save-as"))
+	file.AddSeparator()
 	file.AddText("Xuất ra HTML…\tCtrl+Shift+E", nil, cmd("export-html"))
 	file.AddText("In…\tCtrl+P", nil, cmd("print"))
 	file.AddSeparator()
@@ -350,6 +356,10 @@ func (a *App) buildMenu() *menu.Menu {
 	file.AddText("Thoát\tAlt+F4", nil, func(*menu.CallbackData) { runtime.Quit(a.ctx) })
 
 	view := m.AddSubmenu("Xem")
+	view.AddText("Chế độ xem\tCtrl+1", nil, cmd("mode-view"))
+	view.AddText("Chế độ sửa\tCtrl+2", nil, cmd("mode-edit"))
+	view.AddText("Chia đôi (sửa + xem)\tCtrl+3", nil, cmd("mode-split"))
+	view.AddSeparator()
 	view.AddText("Tìm trong trang…\tCtrl+F", nil, cmd("find"))
 	view.AddSeparator()
 	view.AddText("Cây thư mục\tCtrl+B", nil, cmd("toggle-sidebar"))

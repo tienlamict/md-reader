@@ -23,23 +23,42 @@
     </aside>
 
     <div class="main">
-        <nav class="tabbar" id="tabbar" role="tablist" aria-label="Các file đang mở"></nav>
+        <div class="tabstrip" id="tabstrip" hidden>
+            <nav class="tabbar" id="tabbar" role="tablist" aria-label="Các file đang mở"></nav>
+            <div class="mode-switch" id="mode-switch" role="group" aria-label="Chế độ hiển thị">
+                <button type="button" data-mode="view" title="Xem (Ctrl+1)" aria-label="Xem"></button>
+                <button type="button" data-mode="edit" title="Sửa (Ctrl+2)" aria-label="Sửa"></button>
+                <button type="button" data-mode="split" title="Chia đôi: sửa + xem (Ctrl+3)" aria-label="Chia đôi"></button>
+            </div>
+        </div>
         <div class="body">
-            <div class="content" id="content">
-                <section class="welcome" id="welcome">
-                    <h1>MD Reader</h1>
-                    <p>Xem file Markdown giống như trên GitHub.</p>
-                    <div class="welcome-actions">
-                        <button class="btn" id="open-btn" type="button">Mở file…</button>
-                        <button class="btn" id="open-folder-btn" type="button">Mở thư mục…</button>
-                    </div>
-                    <p class="hint">Hoặc kéo thả file .md / thư mục vào cửa sổ.</p>
-                    <div class="recent" id="recent" hidden>
-                        <h2>Mở gần đây</h2>
-                        <ul id="recent-list"></ul>
-                    </div>
+            <div class="workspace" id="workspace" data-mode="view">
+                <div class="conflict-bar" id="conflict-bar" role="alert" hidden>
+                    <span>File đã bị thay đổi bên ngoài app trong lúc bạn đang sửa.</span>
+                    <button class="btn btn-sm" data-act="reload" type="button">Tải bản trên đĩa (bỏ thay đổi của bạn)</button>
+                    <button class="btn btn-sm" data-act="keep" type="button">Giữ bản của tôi</button>
+                </div>
+                <section class="editor-pane" id="editor-pane" aria-label="Trình soạn thảo">
+                    <div class="editor-host" id="editor-host"></div>
+                    <div class="editor-status" id="editor-status"></div>
                 </section>
-                <article class="markdown-body" id="doc" hidden></article>
+                <div class="content" id="content">
+                    <section class="welcome" id="welcome">
+                        <h1>MD Reader</h1>
+                        <p>Xem và sửa file Markdown giống như trên GitHub.</p>
+                        <div class="welcome-actions">
+                            <button class="btn" id="open-btn" type="button">Mở file…</button>
+                            <button class="btn" id="open-folder-btn" type="button">Mở thư mục…</button>
+                            <button class="btn" id="new-btn" type="button">File mới</button>
+                        </div>
+                        <p class="hint">Hoặc kéo thả file .md / thư mục vào cửa sổ.</p>
+                        <div class="recent" id="recent" hidden>
+                            <h2>Mở gần đây</h2>
+                            <ul id="recent-list"></ul>
+                        </div>
+                    </section>
+                    <article class="markdown-body" id="doc" hidden></article>
+                </div>
             </div>
             <aside class="toc pane" id="toc" aria-label="Mục lục">
                 <header class="pane-header"><span class="pane-title">Mục lục</span></header>

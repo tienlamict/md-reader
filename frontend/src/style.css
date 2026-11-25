@@ -773,3 +773,310 @@ button {
         break-inside: avoid;
     }
 }
+
+/* ---------- Editor colours (CodeMirror reads these) ---------- */
+
+:root {
+    --cm-gutter: #8c959f;
+    --cm-active-line: rgba(234, 238, 242, 0.5);
+    --cm-selection: rgba(9, 105, 218, 0.2);
+    --cm-match: rgba(84, 174, 255, 0.25);
+    --cm-heading: #0550ae;
+    --cm-link: #0969da;
+    --cm-code: #953800;
+    --cm-mark: #8250df;
+    --cm-keyword: #cf222e;
+    --cm-string: #0a3069;
+    --cm-number: #0550ae;
+    --cm-function: #8250df;
+    --cm-type: #953800;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --cm-gutter: #6e7681;
+        --cm-active-line: rgba(110, 118, 129, 0.1);
+        --cm-selection: rgba(56, 139, 253, 0.3);
+        --cm-match: rgba(56, 139, 253, 0.2);
+        --cm-heading: #79c0ff;
+        --cm-link: #58a6ff;
+        --cm-code: #ffa657;
+        --cm-mark: #d2a8ff;
+        --cm-keyword: #ff7b72;
+        --cm-string: #a5d6ff;
+        --cm-number: #79c0ff;
+        --cm-function: #d2a8ff;
+        --cm-type: #ffa657;
+    }
+}
+
+:root[data-theme="dark"] {
+    --cm-gutter: #6e7681;
+    --cm-active-line: rgba(110, 118, 129, 0.1);
+    --cm-selection: rgba(56, 139, 253, 0.3);
+    --cm-match: rgba(56, 139, 253, 0.2);
+    --cm-heading: #79c0ff;
+    --cm-link: #58a6ff;
+    --cm-code: #ffa657;
+    --cm-mark: #d2a8ff;
+    --cm-keyword: #ff7b72;
+    --cm-string: #a5d6ff;
+    --cm-number: #79c0ff;
+    --cm-function: #d2a8ff;
+    --cm-type: #ffa657;
+}
+
+/* ---------- Tab strip & mode switch ---------- */
+
+.tabstrip {
+    display: flex;
+    flex: none;
+    height: 36px;
+    background: var(--bg-pane);
+    border-bottom: 1px solid var(--border);
+}
+
+.tabstrip .tabbar {
+    flex: 1;
+    min-width: 0;
+    height: auto;
+    border-bottom: 0;
+}
+
+.mode-switch {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    flex: none;
+}
+
+.mode-switch button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    color: var(--muted);
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.mode-switch button:hover {
+    color: var(--fg);
+    background: var(--bg-hover);
+}
+
+.mode-switch button[aria-pressed="true"] {
+    color: var(--fg);
+    background: var(--bg);
+    border-color: var(--border);
+}
+
+.mode-switch button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+/* Unsaved tab: a dot in place of the close button (the × shows on hover). */
+.tab .dirty-dot {
+    display: none;
+    width: 8px;
+    height: 8px;
+    margin: 4px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.tab.dirty .tab-close {
+    visibility: visible;
+}
+
+.tab.dirty .tab-close .dirty-dot {
+    display: block;
+}
+
+.tab.dirty .tab-close .icon {
+    display: none;
+}
+
+.tab.dirty .tab-close:hover .dirty-dot,
+.tab.dirty .tab-close:focus-visible .dirty-dot {
+    display: none;
+}
+
+.tab.dirty .tab-close:hover .icon,
+.tab.dirty .tab-close:focus-visible .icon {
+    display: inline-block;
+}
+
+/* ---------- Workspace: view / edit / split ---------- */
+
+.workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+}
+
+.workspace .conflict-bar {
+    grid-column: 1 / -1;
+}
+
+.workspace[data-mode="view"] .editor-pane {
+    display: none;
+}
+
+.workspace[data-mode="edit"] .content {
+    display: none;
+}
+
+.workspace[data-mode="split"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.workspace[data-mode="split"] .editor-pane {
+    border-right: 1px solid var(--border);
+}
+
+.workspace > .editor-pane,
+.workspace > .content {
+    grid-row: 2;
+}
+
+.editor-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+}
+
+.editor-host {
+    flex: 1;
+    min-height: 0;
+}
+
+.editor-host .cm-editor {
+    height: 100%;
+}
+
+.editor-host .cm-editor.cm-focused {
+    outline: none;
+}
+
+.editor-status {
+    flex: none;
+    height: 24px;
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: 24px;
+    color: var(--muted);
+    background: var(--bg-pane);
+    border-top: 1px solid var(--border);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+/* In split mode the preview is narrower: use GitHub's mobile padding. */
+.workspace[data-mode="split"] .markdown-body {
+    padding: 24px 32px 64px;
+}
+
+.conflict-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--fg);
+    background: var(--find-bg);
+    border-bottom: 1px solid var(--border);
+}
+
+.conflict-bar span {
+    flex: 1;
+    min-width: 200px;
+}
+
+/* ---------- Dialog ---------- */
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(1, 4, 9, 0.45);
+}
+
+.modal {
+    width: min(440px, 100%);
+    padding: 20px;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(1, 4, 9, 0.35);
+}
+
+.modal h2 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.modal p {
+    margin: 0 0 20px;
+    color: var(--muted);
+}
+
+.modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.btn-primary {
+    color: #ffffff;
+    background: #1f883d;
+    border-color: rgba(31, 35, 40, 0.15);
+}
+
+.btn-primary:hover {
+    background: #1c8139;
+}
+
+.btn-danger {
+    color: var(--error-fg);
+}
+
+.btn-danger:hover {
+    color: #ffffff;
+    background: #cf222e;
+    border-color: #cf222e;
+}
+
+@media print {
+    .tabstrip, .editor-pane, .conflict-bar, .modal-backdrop {
+        display: none !important;
+    }
+
+    .workspace {
+        display: block;
+    }
+
+    .workspace .content {
+        display: block !important;
+    }
+}

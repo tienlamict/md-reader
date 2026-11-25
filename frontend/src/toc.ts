@@ -6,6 +6,7 @@ export interface HeadingInfo {
     level: number;
     id: string;
     text: string;
+    line?: number; // 1-based source line
 }
 
 export class Toc {

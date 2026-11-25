@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"html"
+	"slices"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -44,6 +45,8 @@ func (n *MathInline) Dump(src []byte, level int) {
 type MathBlock struct {
 	ast.BaseBlock
 	closed bool
+	fenced bool // came from a ```math code block
+	open   int  // offset+1 of the opening $$ (0 when unknown)
 }
 
 func (n *MathBlock) Kind() ast.NodeKind { return KindMathBlock }
@@ -105,7 +108,7 @@ func (p *mathInlineParser) Parse(_ ast.Node, block text.Reader, _ parser.Context
 }
 
 func clone(b []byte) []byte {
-	return append([]byte(nil), b...)
+	return slices.Clone(b)
 }
 
 // ---------- block ----------
@@ -120,7 +123,7 @@ func (p *mathBlockParser) Open(_ ast.Node, reader text.Reader, pc parser.Context
 	if pos < 0 || !bytes.HasPrefix(line[pos:], []byte("$$")) {
 		return nil, parser.NoChildren
 	}
-	node := &MathBlock{}
+	node := &MathBlock{open: seg.Start + pos + 1}
 	start := seg.Start + pos + 2
 	rest := line[pos+2:]
 	trimmed := bytes.TrimRight(rest, " \t\r\n")
@@ -191,7 +194,7 @@ func (r *mathRenderer) renderBlock(w util.BufWriter, src []byte, n ast.Node, ent
 	if !entering {
 		return ast.WalkContinue, nil
 	}
-	_, _ = w.WriteString(`<div class="math math-display">` + html.EscapeString(linesText(n, src)) + "</div>\n")
+	_, _ = w.WriteString(`<div class="math math-display"` + lineAttrHTML(n) + `>` + html.EscapeString(linesText(n, src)) + "</div>\n")
 	return ast.WalkSkipChildren, nil
 }
 
@@ -199,7 +202,7 @@ func (r *mathRenderer) renderBlock(w util.BufWriter, src []byte, n ast.Node, ent
 func linesText(n ast.Node, src []byte) string {
 	var b bytes.Buffer
 	lines := n.Lines()
-	for i := 0; i < lines.Len(); i++ {
+	for i := range lines.Len() {
 		seg := lines.At(i)
 		b.Write(seg.Value(src))
 	}

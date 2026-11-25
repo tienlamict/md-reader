@@ -107,6 +107,42 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class Source {
+	    path: string;
+	    name: string;
+	    text: string;
+	    format: textfile.Format;
+	
+	    static createFrom(source: any = {}) {
+	        return new Source(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.name = source["name"];
+	        this.text = source["text"];
+	        this.format = this.convertValues(source["format"], textfile.Format);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class StartupArgs {
 	    files: string[];
 	    folder: string;
@@ -130,6 +166,7 @@ export namespace markdown {
 	    level: number;
 	    id: string;
 	    text: string;
+	    line: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Heading(source);
@@ -140,7 +177,40 @@ export namespace markdown {
 	        this.level = source["level"];
 	        this.id = source["id"];
 	        this.text = source["text"];
+	        this.line = source["line"];
 	    }
+	}
+	export class Result {
+	    html: string;
+	    headings: Heading[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.html = source["html"];
+	        this.headings = this.convertValues(source["headings"], Heading);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ThemeCSS {
 	    light: string;
@@ -154,6 +224,25 @@ export namespace markdown {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.light = source["light"];
 	        this.dark = source["dark"];
+	    }
+	}
+
+}
+
+export namespace textfile {
+	
+	export class Format {
+	    encoding: string;
+	    lineEnding: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Format(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.encoding = source["encoding"];
+	        this.lineEnding = source["lineEnding"];
 	    }
 	}
 
