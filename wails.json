@@ -9,5 +9,28 @@
   "author": {
     "name": "tienlamict",
     "email": "tienlamict@gmail.com"
+  },
+  "info": {
+    "companyName": "tienlamict",
+    "productName": "MD Reader",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2026 tienlamict",
+    "comments": "Xem và sửa file Markdown giống như trên GitHub",
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "MDReader.Markdown",
+        "description": "Tài liệu Markdown",
+        "iconName": "mdFile",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
+        "name": "MDReader.Markdown",
+        "description": "Tài liệu Markdown",
+        "iconName": "mdFile",
+        "role": "Editor"
+      }
+    ]
   }
 }

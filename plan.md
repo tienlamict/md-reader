@@ -96,7 +96,7 @@ md-reader/
 - Xử lý xung đột: file bị sửa bên ngoài khi đang có thay đổi chưa lưu thì hỏi người dùng thay vì tự reload.
 - Giữ nguyên kiểu xuống dòng (CRLF/LF) và encoding (UTF-8, có/không BOM) của file gốc khi lưu.
 
-### Phase 6: Đóng gói (khoảng 1 ngày)
+### Phase 6: Đóng gói (khoảng 1 ngày) — ✅ xong
 
 - `wails build`, tạo installer NSIS, đăng ký mở file `.md` bằng app (file association).
 - Chỉ cho chạy 1 instance (Wails có `SingleInstanceLock`): double-click file trong Explorer sẽ mở thêm tab trong cửa sổ đang chạy, không mở cửa sổ mới.

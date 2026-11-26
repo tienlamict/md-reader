@@ -23,6 +23,9 @@ import (
 
 const appName = "MD Reader"
 
+// appVersion must match info.productVersion in wails.json (installer version).
+const appVersion = "1.0.0"
+
 // Events sent from Go to the frontend.
 const (
 	evtCommand = "cmd"           // payload: command name, see buildMenu
@@ -63,7 +66,7 @@ type App struct {
 
 // NewApp creates the application backend and loads saved preferences.
 func NewApp(args []string) *App {
-	a := &App{renderer: markdown.New(), cfg: config.Default(), args: parseArgs(args)}
+	a := &App{renderer: markdown.New(), cfg: config.Default(), args: parseArgs(args, "")}
 	if p, err := config.DefaultPath(); err == nil {
 		a.cfgPath = p
 		a.cfg = config.Load(p)
@@ -73,9 +76,16 @@ func NewApp(args []string) *App {
 
 // parseArgs keeps existing paths: Markdown files are opened as tabs and the
 // last folder becomes the sidebar folder.
-func parseArgs(args []string) StartupArgs {
+// Relative paths are resolved against wd (the current directory when "").
+func parseArgs(args []string, wd string) StartupArgs {
 	out := StartupArgs{Files: []string{}}
 	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			continue // flags passed by Windows or Wails, not paths
+		}
+		if wd != "" && !filepath.IsAbs(arg) {
+			arg = filepath.Join(wd, arg)
+		}
 		abs, err := filepath.Abs(arg)
 		if err != nil {
 			continue
@@ -382,6 +392,9 @@ func (a *App) buildMenu() *menu.Menu {
 	} {
 		view.AddRadio(opt.label, current == opt.value, nil, func(*menu.CallbackData) { a.setTheme(opt.value) })
 	}
+
+	help := m.AddSubmenu("Trợ giúp")
+	help.AddText("Giới thiệu "+appName, nil, func(*menu.CallbackData) { a.showAbout() })
 	return m
 }
 

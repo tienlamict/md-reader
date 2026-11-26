@@ -64,7 +64,7 @@ ManifestDPIAware true
 
 !insertmacro MUI_UNPAGE_INSTFILES # Uinstalling page
 
-!insertmacro MUI_LANGUAGE "English" # Set the Language of the installer
+!insertmacro MUI_LANGUAGE "Vietnamese" # Set the Language of the installer
 
 ## The following two statements can be used to sign the installer and the uninstaller. The path to the binaries are provided in %1
 #!uninstfinalize 'signtool --file "%1"'
@@ -102,6 +102,23 @@ Section
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
 
+    # wails.associateFiles writes the command without quotes around the exe
+    # path, which breaks (and is unsafe) under "Program Files". Rewrite it.
+    WriteRegStr SHELL_CONTEXT "Software\Classes\MDReader.Markdown\shell\open" "" "Mở bằng ${INFO_PRODUCTNAME}"
+    WriteRegStr SHELL_CONTEXT "Software\Classes\MDReader.Markdown\shell\open\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" "%1"'
+
+    # Also list MD Reader under "Open with" for Markdown files, so it stays
+    # available even if the user picks another default app.
+    WriteRegStr SHELL_CONTEXT "Software\Classes\.md\OpenWithProgids" "MDReader.Markdown" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\.markdown\OpenWithProgids" "MDReader.Markdown" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}" "FriendlyAppName" "${INFO_PRODUCTNAME}"
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\SupportedTypes" ".md" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\SupportedTypes" ".markdown" ""
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}\shell\open\command" "" '"$INSTDIR\${PRODUCT_EXECUTABLE}" "%1"'
+
+    # Tell Explorer to refresh file icons (SHCNE_ASSOCCHANGED).
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+
     !insertmacro wails.writeUninstaller
 SectionEnd
 
@@ -117,6 +134,13 @@ Section "uninstall"
 
     !insertmacro wails.unassociateFiles
     !insertmacro wails.unassociateCustomProtocols
+
+    DeleteRegValue SHELL_CONTEXT "Software\Classes\.md\OpenWithProgids" "MDReader.Markdown"
+    DeleteRegValue SHELL_CONTEXT "Software\Classes\.markdown\OpenWithProgids" "MDReader.Markdown"
+    DeleteRegKey SHELL_CONTEXT "Software\Classes\Applications\${PRODUCT_EXECUTABLE}"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
+
+    # User settings (%APPDATA%\md-reader\config.json) are kept on purpose.
 
     !insertmacro wails.deleteUninstaller
 SectionEnd

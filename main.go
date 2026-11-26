@@ -39,6 +39,10 @@ func main() {
 		OnDomReady:       app.domReady,
 		OnShutdown:       app.shutdown,
 		OnBeforeClose:    app.beforeClose,
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               singleInstanceID,
+			OnSecondInstanceLaunch: app.onSecondInstance,
+		},
 		Windows: &windows.Options{
 			Theme: windows.SystemDefault,
 		},
